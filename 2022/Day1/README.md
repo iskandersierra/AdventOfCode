@@ -18,7 +18,19 @@ node part_two.js data/input.txt
 ## Alternative languages to test
 
 - [Python](https://www.python.org/)
+
+    ```bash
+    python part_one.py data/input.txt
+    python part_two.py data/input.txt
+    ```
+
 - [C#](https://docs.microsoft.com/en-us/dotnet/csharp/)
+
+    ```bash
+    dotnet csi part_one.csx data/input.txt
+    dotnet csi part_two.csx data/input.txt
+    ```
+
 - [F#](https://fsharp.org/)
 
     ```bash
