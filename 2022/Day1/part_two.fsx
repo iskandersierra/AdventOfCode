@@ -1,9 +1,7 @@
 let addSorted maxSize value list =
     value :: list
     |> List.sortDescending
-    |> function
-        | l when List.length l > maxSize -> List.take maxSize l
-        | l -> l
+    |> List.truncate maxSize
 
 System.Environment.GetCommandLineArgs().[2]
 |> System.IO.File.ReadAllLines
