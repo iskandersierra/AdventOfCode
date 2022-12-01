@@ -6,8 +6,7 @@
 
 [JavaScript on Node.js](https://nodejs.org/en/)
 
-- Install Node.js
-- Install Yarn
+- Install Node.js `v16.18.0`
 
 ## How to run Part One
 
