@@ -8,8 +8,10 @@ Internal challenges for the Advent of Code 2022: Use as many languages as possib
 
 | Language       | Principal | Alternative |
 | -------------- | --------- | ----------- |
-| **JavaScript** | Day 1     |             |
+| **F#**         | Day 5     | 4 days      |
 | **Go**         | Day 2     |             |
+| **JavaScript** | Day 1     |             |
+| **Pascal**     | Day 4     |             |
 | **Racket**     | Day 3     |             |
 | Ada            |           |             |
 | Basic          |           |             |
@@ -23,7 +25,6 @@ Internal challenges for the Advent of Code 2022: Use as many languages as possib
 | Elixir         |           |             |
 | Elm            |           |             |
 | Erlang         |           |             |
-| F#             |           | Multiple    |
 | Fortran        |           |             |
 | Groovy         |           |             |
 | Haskell        |           |             |
@@ -31,7 +32,6 @@ Internal challenges for the Advent of Code 2022: Use as many languages as possib
 | Julia          |           |             |
 | Kotlin         |           |             |
 | Nim            |           |             |
-| Pascal         |           |             |
 | Pony           |           |             |
 | Python         |           | Day 1       |
 | R              |           |             |
