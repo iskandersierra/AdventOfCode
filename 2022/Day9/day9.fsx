@@ -159,5 +159,5 @@ let part2 lines =
 let [| fileName; part |] = Environment.GetCommandLineArgs().[2..3]
 
 File.ReadAllLines fileName
-|> if part = "1" then part1 else part2
-|> printfn "%A"
+    |> if part = "1" then part1 else part2
+    |> printfn "%A"
