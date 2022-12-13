@@ -1,4 +1,4 @@
-#load "Dijkstra.fsx"
+#load "../../modules/Dijkstra.fsx"
 
 open System
 open System.IO
