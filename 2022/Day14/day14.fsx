@@ -168,9 +168,8 @@ let dropSand (Cave (cave, start, minX)) =
 
     match loop start with
     | Some pos ->
-        let newCave = Array2D.copy cave
-        newCave.[pos.x, pos.y] <- SandID
-        Some (Cave(newCave, start, minX))
+        cave.[pos.x, pos.y] <- SandID
+        Some (Cave(cave, start, minX))
     | _ -> None
 
 let dropSandUntilStable cave =
