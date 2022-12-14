@@ -33,6 +33,9 @@ type CaveInput =
         |> String.concat "\n"
 
 [<Literal>]
+let StartX = 500
+
+[<Literal>]
 let AirID = 0uy
 
 [<Literal>]
@@ -42,14 +45,14 @@ let RockID = 1uy
 let SandID = 2uy
 
 type Cave =
-    | Cave of cave: byte [,] * start: (int * int) * minX: int
+    | Cave of cave: byte [,] * start: RockPosition * minX: int
     override this.ToString() =
-        let (Cave (cave, (startX, startY), minX)) = this
+        let (Cave (cave, start, minX)) = this
         let width = cave.GetLength(0)
         let height = cave.GetLength(1)
         let sb = StringBuilder()
 
-        sb.AppendLine(sprintf "Start: %d,%d" startX startY)
+        sb.AppendLine(sprintf "Start: %O" start)
         |> ignore
 
         sb.AppendLine(sprintf "Size: %d,%d" width height)
@@ -59,7 +62,7 @@ type Cave =
 
         for y in 0 .. height - 1 do
             for x in 0 .. width - 1 do
-                if (x, y) = (startX, startY) then
+                if x = start.x && y = start.y then
                     sb.Append('+') |> ignore
                 elif cave.[x, y] = RockID then
                     sb.Append('#') |> ignore
@@ -88,7 +91,7 @@ let parseCaveInput lines =
     | Success (result, _, _) -> result
     | Failure (error, _, _) -> failwith error
 
-let toExplicitCave (CaveInput rockLines) =
+let toExplicitCave withFloor (CaveInput rockLines) =
     let (minX, maxX, maxY) =
         rockLines
         |> List.collect (fun (RockLine rocks) -> rocks)
@@ -96,9 +99,20 @@ let toExplicitCave (CaveInput rockLines) =
             (fun (minX, maxX, maxY) rock -> (minX |> min rock.x, maxX |> max rock.x, maxY |> max rock.y))
             (Int32.MaxValue, Int32.MinValue, Int32.MinValue)
 
+    // If the cave has a floor, we need to add an "infinite" rock line two tiles below the lowest rock line
+    let (minX, maxX, maxY) =
+        if withFloor then
+            let floorY = maxY + 2
+            // We need to add as many tiles to left and right as needed to avoid any sand from falling out of the cave
+            let floorMinX = min (StartX - floorY - 1) minX
+            let floorMaxX = max (StartX + floorY + 1) maxX
+            (floorMinX, floorMaxX, floorY)
+        else
+            (minX, maxX, maxY)
+
     let width = maxX - minX + 1
     let height = maxY + 1
-    let start = (500 - minX, 0)
+    let start = { x = StartX - minX; y = 0 }
     let cave = Array2D.zeroCreate width height
 
     let fillLine fromPosition toPosition =
@@ -127,42 +141,48 @@ let toExplicitCave (CaveInput rockLines) =
         Seq.zip (Seq.take (length - 1) rockLine) (Seq.skip 1 rockLine)
         |> Seq.iter (fun (fromPosition, toPosition) -> fillLine fromPosition toPosition)
 
+    if withFloor then
+        fillLine { x = 0; y = maxY } { x = width - 1; y = maxY }
+
     Cave(cave, start, minX)
 
 let dropSand (Cave (cave, start, minX)) =
     let width = cave.GetLength(0)
     let height = cave.GetLength(1)
 
-    let rec loop (x, y) =
-        if y + 1 >= height then
+    let rec loop pos =
+        if pos.y + 1 >= height then
             None
-        elif cave.[x, y + 1] = AirID then
-            loop (x, y + 1)
-        elif x - 1 < 0 then
+        elif cave.[pos.x, pos.y + 1] = AirID then
+            loop { x = pos.x; y = pos.y + 1 }
+        elif pos.x - 1 < 0 then
             None
-        elif cave.[x - 1, y + 1] = AirID then
-            loop (x - 1, y + 1)
-        elif x + 1 >= width then
+        elif cave.[pos.x - 1, pos.y + 1] = AirID then
+            loop { x = pos.x - 1; y = pos.y + 1 }
+        elif pos.x + 1 >= width then
             None
-        elif cave.[x + 1, y + 1] = AirID then
-            loop (x + 1, y + 1)
+        elif cave.[pos.x + 1, pos.y + 1] = AirID then
+            loop { x = pos.x + 1; y = pos.y + 1 }
         else
-            Some (x, y)
+            Some pos
 
     match loop start with
-    | Some (x, y) ->
+    | Some pos ->
         let newCave = Array2D.copy cave
-        newCave.[x, y] <- SandID
+        newCave.[pos.x, pos.y] <- SandID
         Some (Cave(newCave, start, minX))
-    | None -> None
+    | _ -> None
 
 let dropSandUntilStable cave =
     let rec loop step cave =
         match dropSand cave with
-        | Some newCave ->
-            // printfn "Step %d" step
-            // printfn "%O" newCave
-            loop (step + 1) newCave
+        | Some(Cave(newCave, start, minX)) ->
+            if newCave.[start.x, start.y] = SandID then
+                printfn "Sand reached start position after %d steps" step
+                printfn "%O" cave
+                step + 1
+            else
+                loop (step + 1) (Cave(newCave, start, minX))
         | None ->
             printfn "Last Step %d" step
             printfn "%O" cave
@@ -173,9 +193,17 @@ let dropSandUntilStable cave =
 
 let execute lines =
     let caveInput = parseCaveInput lines
-    let cave = toExplicitCave caveInput
+
+    let cave = toExplicitCave false caveInput
     let stepCount = dropSandUntilStable cave
-    printfn "RESULT: %O" stepCount
+    printfn "CAVE WITHOUT FLOOR: %O" stepCount
+    printfn ""
+
+    let cave = toExplicitCave true caveInput
+    let stepCount = dropSandUntilStable cave
+    printfn "CAVE WITH FLOOR: %O" stepCount
+    printfn ""
+
 
 Environment.GetCommandLineArgs().[2]
 |> File.ReadAllText
