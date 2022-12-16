@@ -55,7 +55,8 @@ module Seq =
 /// Returns a secuence of steps of the search algorithm.
 /// On each step of the sequence, a SearchPathNode and whether the search is finished are returned.
 /// The resulting sequence is lazy, and can return as many final paths as found (possibly infinite).
-/// Use functino aStar to get just the first path found.
+/// Use function aStarFirst to get just the first path found.
+/// Use function aStarBest to get the best path found.
 /// Use function buildAStarPath to build a path from a SearchPathNode.
 let aStarSeq options : SearchPathNode<'nodeLabel, 'edgeLabel, 'state> seq =
     seq {
@@ -104,9 +105,19 @@ let aStarSeq options : SearchPathNode<'nodeLabel, 'edgeLabel, 'state> seq =
 /// Returns the first path found, or None if no path was found.
 /// Use function aStarSeq to get all paths found.
 /// Use function buildAStarPath to build a path from a SearchPathNode.
-let aStar options =
+let aStarFirst options =
     aStarSeq options
     |> Seq.filter (fun pathNode -> pathNode.current.isSolution)
+    |> Seq.tryHead
+
+/// Performs a graph search.
+/// Returns the best path found, or None if no path was found.
+/// Use function aStarSeq to get all paths found.
+/// Use function buildAStarPath to build a path from a SearchPathNode.
+let aStarBest options =
+    aStarSeq options
+    |> Seq.filter (fun pathNode -> pathNode.current.isSolution)
+    |> Seq.sortByComparer options.stateComparer (fun pathNode -> pathNode.current.state)
     |> Seq.tryHead
 
 /// Builds a path from a SearchPathNode.
