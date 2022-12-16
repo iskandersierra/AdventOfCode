@@ -1,24 +1,24 @@
 open System.Collections.Generic
 
-type DijkstraValuedCell<'cell, 'value> = { cell: 'cell; value: 'value }
+type AStarValuedCell<'cell, 'value> = { cell: 'cell; value: 'value }
 
-type DijkstraNode<'cell, 'value> =
-    { info: DijkstraValuedCell<'cell, 'value>
+type AStarNode<'cell, 'value> =
+    { info: AStarValuedCell<'cell, 'value>
       previous: 'cell option }
 
-type DijkstraOptions<'cell, 'value> =
-    { startCells: DijkstraValuedCell<'cell, 'value> list
+type AStarOptions<'cell, 'value> =
+    { startCells: AStarValuedCell<'cell, 'value> list
       isEndCell: 'cell -> bool
       valueComparer: IComparer<'value>
       cellComparer: IEqualityComparer<'cell>
-      terrainFn: DijkstraValuedCell<'cell, 'value> -> DijkstraValuedCell<'cell, 'value> list
-      debug: (DijkstraNode<'cell, 'value> option -> DijkstraNode<'cell, 'value> list -> unit) option }
+      terrainFn: AStarValuedCell<'cell, 'value> -> AStarValuedCell<'cell, 'value> seq
+      debug: (AStarNode<'cell, 'value> option -> AStarNode<'cell, 'value> list -> unit) option }
 
 let listSortByComparer (comparer: IComparer<_>) (keySelector: _ -> _) list =
     System.Linq.Enumerable.OrderBy(list, keySelector, comparer)
     |> Seq.toList
 
-let dijkstra options =
+let astar options =
     let pending = PriorityQueue(options.valueComparer) // Better use a PriorityQueue here
     let visited = Dictionary(options.cellComparer)
 

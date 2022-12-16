@@ -1,11 +1,11 @@
-#load "../../modules/Dijkstra.fsx"
+#load "../../modules/AStarSearch.fsx"
 
 open System
 open System.IO
 open System.Collections.Generic
 open System.Text
 open System.Text.RegularExpressions
-open Dijkstra
+open AStarSearch
 
 #nowarn "0025"
 
@@ -63,7 +63,7 @@ let findShortestPath part (Terrain (start, finish, terrain)) =
               value = fromCell.value + 1 })
 
     let path =
-        dijkstra
+        astar
             { startCells = startCells
               isEndCell = fun cell -> finish = cell
               cellComparer = EqualityComparer<_>.Default
