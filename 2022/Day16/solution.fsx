@@ -13,6 +13,7 @@ open Graphs
 
 #nowarn "0025"
 open System.Diagnostics
+open System.Collections
 
 [<Measure>]
 type minute
@@ -23,7 +24,6 @@ type pressure
 [<Measure>]
 type flowRate = pressure / minute
 
-let TotalTime = 30<minute>
 let TickTime = 1<minute>
 let StartingValve = "AA"
 
@@ -53,7 +53,8 @@ type ValveInfo =
 
 type Problem =
     { valves: Map<Valve, ValveInfo>
-      openableCount: int }
+      openableCount: int
+      totalTime: int<minute> }
 
 let parseInput lines =
     let parseValveInput: Parser<ValveInput, unit> =
@@ -89,6 +90,7 @@ let toProblem (ProblemInput lines) : Problem =
     |> Map.ofList
     |> fun valves ->
         { valves = valves
+          totalTime = 30<minute>
           openableCount =
             valves.Values
             |> Seq.filter (fun v -> v.flowRate > 0<flowRate>)
@@ -129,7 +131,7 @@ let isOpen valve state = state.openValves |> Set.contains valve
 let stateCost state = -state.totalPressure
 
 let isSolution problem state =
-    state.time = TotalTime
+    state.time = problem.totalTime
     || Set.count state.openValves = problem.openableCount
 
 let openStatus state =
@@ -207,6 +209,7 @@ let searchOptions problem =
                         && problem.valves.[node.state.valve].flowRate > 0<flowRate>
                     then
                         let time = node.state.time + TickTime
+
                         let state' =
                             { node.state with
                                 previous = Some node.state
@@ -214,7 +217,7 @@ let searchOptions problem =
                                 totalPressure =
                                     node.state.totalPressure
                                     + problem.valves.[node.state.valve].flowRate
-                                      * (TotalTime - time)
+                                      * (problem.totalTime - time)
                                 openValves = node.state.openValves |> Set.add node.state.valve }
 
                         yield
