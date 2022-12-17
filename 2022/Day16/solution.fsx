@@ -51,11 +51,21 @@ type ValveInfo =
     { name: Valve
       flowRate: int<flowRate>
       nextValves: Valve list }
+    override this.ToString() =
+        sprintf "Valve %s has flow rate %2d and connects to %s" this.name this.flowRate (String.concat ", " this.nextValves)
 
 type Problem =
     { valves: Map<Valve, ValveInfo>
       openableCount: int
       totalTime: int<minute> }
+    override this.ToString() =
+        let valves =
+            this.valves
+            |> Map.toSeq
+            |> Seq.map (fun (name, info) ->
+                sprintf "  - %O" info)
+            |> String.concat "\n"
+        sprintf "Problem with %d meaningful valves out of %d total valves to run for %d minutes\n%s" this.openableCount this.valves.Count this.totalTime valves
 
 let parseInput lines =
     let parseValveInput: Parser<ValveInput, unit> =
@@ -395,6 +405,7 @@ let execute lines =
     let input = parseInput lines
 
     let problem1 = toProblem 30<minute> input
+    printfn "Problem: %O" problem1
     Part1.execute problem1
 
     let problem2 = toProblem 26<minute> input
