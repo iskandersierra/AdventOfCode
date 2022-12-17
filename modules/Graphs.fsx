@@ -1,144 +1,191 @@
+#load "Preamble.fsx"
+
 open System.Collections.Generic
+open Preamble
 
 // Implementation of graph search algorithms
 
-// Glossary:
-// - node: a vertex in the graph
-// - edge: a connection between two nodes
-// - node label: a label on a node. It can be a string, a tuple, a record, or any indication of a position in a search space
-// - edge label: a label on an edge. It can represent the decision that was made to get from one node to another
-// - state: the state of the search. It can be a number, a record, or any indication of the progress of the search
-// - search node: a node in the search space, with a state, representing a state of the search algorithm
-// - search edge: an edge in the search space, with a state, representing transition of the search algorithm
-// - search path item: a node in the search path, with a node label and a state, and an optional arrival edge label and state
-// - start nodes: the nodes in the search space that the search algorithm starts from
-// - is solution: indicates whether a search node is a solution
-// - state comparer: a comparer that compares the states of two search nodes. The LOWER the cost of the state, the BETTER.
-// - node comparer: a comparer that compares the node labels of two search nodes. Allows to keep track of the best cost for each node label.
-// - next: a function that returns the search edges that can be reached from a search node.
-// The cost of a search MUST be monotonic, i.e. the cost of a search edge must be greater than or equal to the cost of the search node it comes from.
-// Otherwise, the search algorithm will fail with an exception.
+type SearchNode<'state> = { state: 'state; isSolution: bool }
 
-type SearchNode<'nodeLabel, 'state> =
-    { node: 'nodeLabel
-      state: 'state
+type SearchEdge<'state, 'decision> =
+    { state: 'state
+      decision: 'decision
       isSolution: bool }
 
-type SearchEdge<'nodeLabel, 'edgeLabel, 'state> =
-    { edgeLabel: 'edgeLabel
-      target: 'nodeLabel
+type SearchPathNode<'state, 'decision> =
+    { current: SearchNode<'state>
+      previous: {| decision: 'decision
+                   node: SearchPathNode<'state, 'decision> |} option }
+
+type SearchPathItem<'state, 'decision> =
+    { state: 'state
       isSolution: bool
-      state: 'state }
+      decision: 'decision option }
 
-type SearchPathNode<'nodeLabel, 'edgeLabel, 'state> =
-    { current: SearchNode<'nodeLabel, 'state>
-      previous: {| edgeLabel: 'edgeLabel
-                   pathNode: SearchPathNode<'nodeLabel, 'edgeLabel, 'state> |} option }
-
-type SearchPathItem<'nodeLabel, 'edgeLabel, 'state> =
-    { node: 'nodeLabel
-      state: 'state
-      edge: ('edgeLabel * 'state) option }
-
-type SearchOptions<'nodeLabel, 'edgeLabel, 'state> =
-    { startNodes: SearchNode<'nodeLabel, 'state> list
-      stateComparer: IComparer<'state>
-      stateCost: 'state -> string
-      nodeComparer: IEqualityComparer<'nodeLabel>
-      next: SearchNode<'nodeLabel, 'state> -> SearchEdge<'nodeLabel, 'edgeLabel, 'state> seq }
-
-module Seq =
-    let sortByComparer (comparer: IComparer<_>) (keySelector: _ -> _) (source: _ seq) : _ seq =
-        System.Linq.Enumerable.OrderBy(source, keySelector, comparer)
-
-/// Performs a graph search.
-/// Returns a secuence of steps of the search algorithm.
-/// On each step of the sequence, a SearchPathNode and whether the search is finished are returned.
-/// The resulting sequence is lazy, and can return as many final paths as found (possibly infinite).
-/// Use function aStarFirst to get just the first path found.
-/// Use function aStarBest to get the best path found.
-/// Use function buildAStarPath to build a path from a SearchPathNode.
-let aStarSeq options : SearchPathNode<'nodeLabel, 'edgeLabel, 'state> seq =
-    seq {
-        let pending = PriorityQueue(options.stateComparer)
-        let visited = Dictionary(options.nodeComparer)
-
-        for startNode in options.startNodes do
-            let pathNode = { current = startNode; previous = None }
-            pending.Enqueue(pathNode, startNode.state)
-            visited.[startNode.node] <- pathNode
-
-        let includeNode current edge =
-            let pathNode =
-                { current =
-                    { node = edge.target
-                      state = edge.state
-                      isSolution = edge.isSolution }
-                  previous =
-                    Some
-                        {| edgeLabel = edge.edgeLabel
-                           pathNode = current |} }
-
-            pending.Enqueue(pathNode, edge.state)
-            visited.[edge.target] <- pathNode
-
-        while pending.Count > 0 do
-            let current = pending.Dequeue()
-            yield current
-
-            for edge in options.next current.current do
-                let isWorseThanCurrent = options.stateComparer.Compare(edge.state, current.current.state) > 0
-                if isWorseThanCurrent then
-                    failwithf "The cost of a search edge %A [%s] must be greater than or equal to the cost of the search node %A [%s] it comes from." edge.edgeLabel (options.stateCost edge.state) current.current.node (options.stateCost current.current.state)
-                match visited.TryGetValue(edge.target) with
-                | true, previous ->
-                    let isBetterState =
-                        options.stateComparer.Compare(edge.state, previous.current.state) < 0
-
-                    if isBetterState then
-                        includeNode current edge
-
-                | false, _ -> includeNode current edge
-    }
-
-/// Performs a graph search.
-/// Returns the first path found, or None if no path was found.
-/// Use function aStarSeq to get all paths found.
-/// Use function buildAStarPath to build a path from a SearchPathNode.
-let aStarFirst options =
-    aStarSeq options
-    |> Seq.filter (fun pathNode -> pathNode.current.isSolution)
+/// Finds the first solution found on a search sequence.
+/// Only use if the greedy search is guaranteed to find the best solution first.
+let findFirstSolution searchResult =
+    searchResult
+    |> Seq.filter (fun node -> node.current.isSolution)
     |> Seq.tryHead
 
-/// Performs a graph search.
-/// Returns the best path found, or None if no path was found.
-/// Use function aStarSeq to get all paths found.
-/// Use function buildAStarPath to build a path from a SearchPathNode.
-let aStarBest options =
-    aStarSeq options
-    |> Seq.filter (fun pathNode -> pathNode.current.isSolution)
-    |> Seq.sortByComparer options.stateComparer (fun pathNode -> pathNode.current.state)
-    |> Seq.tryHead
+/// Finds the best solution in a search result, using the given comparer to compare states.
+/// Only use if the search space is finite and relativelly small.
+/// In such cases, the `next` function should be optimized to limit the search space.
+let findBestSolution stateCostComparer searchResult =
+    searchResult
+    |> Seq.filter (fun node -> node.current.isSolution)
+    |> Seq.tryMinBy stateCostComparer (fun node -> node.current.state)
 
 /// Builds a path from a SearchPathNode.
-let buildAStarPath pathNode : SearchPathItem<'nodeLabel, 'edgeLabel, 'state> list =
+let buildPathItems pathNode : SearchPathItem<'state, 'decision> list =
     let rec build pathNode =
         match pathNode.previous with
         | Some previous ->
             let item =
-                { node = pathNode.current.node
+                { isSolution = pathNode.current.isSolution
                   state = pathNode.current.state
-                  edge = Some (previous.edgeLabel, previous.pathNode.current.state) }
+                  decision = Some previous.decision }
 
-            item :: build previous.pathNode
+            item :: build previous.node
 
         | None ->
             let item =
-                { node = pathNode.current.node
+                { isSolution = pathNode.current.isSolution
                   state = pathNode.current.state
-                  edge = None }
+                  decision = None }
 
             [ item ]
 
-    build pathNode
-    |> List.rev
+    build pathNode |> List.rev
+
+/// Memoized searches. Use equality and hash over states to avoid infinite loops.
+
+type SearchMemoOptions<'state, 'decision> =
+    { startNodes: SearchNode<'state> seq
+      stateCostComparer: 'state -> 'state -> int
+      stateEquals: 'state -> 'state -> bool
+      stateHash: 'state -> int
+      next: SearchNode<'state> -> SearchEdge<'state, 'decision> seq }
+
+// depthFirstSearchMemoSeq performs a Depth First Search on a search space
+// Given that the search space could contain repeated states, a set of all visited states is memoized while searching, to avoid infinite loops
+// This is a lazy sequence, so it can return as many final paths as found (possibly infinite).
+// Depth first search does not use the cost of the search nodes.
+let depthFirstSearchMemoSeq (options: SearchMemoOptions<'state, 'decision>) =
+    seq {
+        let visited =
+            Dictionary<'state, SearchPathNode<'state, 'decision>>(
+                EqualityComparer.ofFun options.stateEquals options.stateHash)
+        let stack = Stack<SearchPathNode<'state,'decision>>()
+
+        for node in options.startNodes do
+            let pathNode = { current = node; previous = None }
+            stack.Push pathNode
+
+        while stack.Count > 0 do
+            let pathNode = stack.Pop()
+
+            if not (visited.ContainsKey pathNode.current.state) then
+                visited.Add(pathNode.current.state, pathNode)
+
+                yield pathNode
+
+                let edges = options.next pathNode.current
+
+                for edge in edges do
+                    let node' =
+                        { state = edge.state
+                          isSolution = edge.isSolution }
+
+                    let pathNode' =
+                        { current = node'
+                          previous =
+                            Some
+                                {| decision = edge.decision
+                                   node = pathNode |} }
+
+                    stack.Push pathNode'
+    }
+
+// breathFirstSearchMemoSeq performs a Depth First Search on a search space
+// Given that the search space could contain repeated states, a set of all visited states is memoized while searching, to avoid infinite loops
+// This is a lazy sequence, so it can return as many final paths as found (possibly infinite).
+// Breath first search does not use the cost of the search nodes.
+let breadthFirstSearchMemoSeq (options: SearchMemoOptions<'state, 'decision>) =
+    seq {
+        let visited =
+            Dictionary<'state, SearchPathNode<'state, 'decision>>(
+                EqualityComparer.ofFun options.stateEquals options.stateHash)
+        let queue = Queue<SearchPathNode<'state,'decision>>()
+
+        for node in options.startNodes do
+            let pathNode = { current = node; previous = None }
+            queue.Enqueue pathNode
+
+        while queue.Count > 0 do
+            let pathNode = queue.Dequeue()
+
+            if not (visited.ContainsKey pathNode.current.state) then
+                visited.Add(pathNode.current.state, pathNode)
+
+                yield pathNode
+
+                let edges = options.next pathNode.current
+
+                for edge in edges do
+                    let node' =
+                        { state = edge.state
+                          isSolution = edge.isSolution }
+
+                    let pathNode' =
+                        { current = node'
+                          previous =
+                            Some
+                                {| decision = edge.decision
+                                   node = pathNode |} }
+
+                    queue.Enqueue pathNode'
+    }
+
+// breathFirstSearchMemoSeq performs a Depth First Search on a search space
+// Given that the search space could contain repeated states, a set of all visited states is memoized while searching, to avoid infinite loops
+// This is a lazy sequence, so it can return as many final paths as found (possibly infinite).
+// Breath first search does not use the cost of the search nodes.
+let aStarSearchMemoSeq (options: SearchMemoOptions<'state, 'decision>) =
+    seq {
+        let visited =
+            Dictionary<'state, SearchPathNode<'state, 'decision>>(
+                EqualityComparer.ofFun options.stateEquals options.stateHash)
+        let queue =
+            PriorityQueue<SearchPathNode<'state,'decision>, 'state>(
+                Comparer.ofFun options.stateCostComparer)
+
+        for node in options.startNodes do
+            let pathNode = { current = node; previous = None }
+            queue.Enqueue(pathNode, pathNode.current.state)
+
+        while queue.Count > 0 do
+            let pathNode = queue.Dequeue()
+
+            if not (visited.ContainsKey pathNode.current.state) then
+                visited.Add(pathNode.current.state, pathNode)
+
+                yield pathNode
+
+                let edges = options.next pathNode.current
+
+                for edge in edges do
+                    let node' =
+                        { state = edge.state
+                          isSolution = edge.isSolution }
+
+                    let pathNode' =
+                        { current = node'
+                          previous =
+                            Some
+                                {| decision = edge.decision
+                                   node = pathNode |} }
+
+                    queue.Enqueue(pathNode, pathNode'.current.state)
+    }

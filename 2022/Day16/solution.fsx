@@ -1,4 +1,5 @@
 #r "nuget: FParsec, 1.1.1"
+#load "../../modules/Preamble.fsx"
 #load "../../modules/Graphs.fsx"
 
 open System
@@ -7,9 +8,11 @@ open System.Collections.Generic
 open System.Text
 open System.Text.RegularExpressions
 open FParsec
+open Preamble
 open Graphs
 
 #nowarn "0025"
+open System.Diagnostics
 
 [<Measure>]
 type minute
@@ -20,10 +23,9 @@ type pressure
 [<Measure>]
 type flowRate = pressure / minute
 
-let RemainingTime = 30<minute>
+let TotalTime = 30<minute>
+let TickTime = 1<minute>
 let StartingValve = "AA"
-let TimeToOpenValve = 1<minute>
-let TimeToTraverseTunnel = 1<minute>
 
 type Valve = string
 
@@ -49,7 +51,9 @@ type ValveInfo =
       flowRate: int<flowRate>
       nextValves: Valve list }
 
-type Problem = Map<Valve, ValveInfo>
+type Problem =
+    { valves: Map<Valve, ValveInfo>
+      openableCount: int }
 
 let parseInput lines =
     let parseValveInput: Parser<ValveInput, unit> =
@@ -83,14 +87,27 @@ let toProblem (ProblemInput lines) : Problem =
           flowRate = flowRate
           nextValves = nextValves })
     |> Map.ofList
+    |> fun valves ->
+        { valves = valves
+          openableCount =
+            valves.Values
+            |> Seq.filter (fun v -> v.flowRate > 0<flowRate>)
+            |> Seq.length }
 
-type NodeLabel =
+type State =
     { valve: Valve
-      pressure: int<pressure> }
+      time: int<minute>
+      // How much time each valve will remain open
+      openValves: Map<Valve, int<minute>>
+      previous: State option }
 
-type NodeState =
-    { remainingTime: int<minute>
-      openValves: Map<Valve, int<minute>> }
+type Decision =
+    | OpenValve
+    | MoveToValve of Valve
+    override this.ToString() =
+        match this with
+        | OpenValve -> "o>"
+        | MoveToValve _ -> "m>"
 
 let isOpen valve state =
     state.openValves |> Map.containsKey valve
@@ -98,246 +115,159 @@ let isOpen valve state =
 let totalPressure (problem: Problem) state =
     state.openValves
     |> Map.toList
-    |> List.map (fun (valve, remaining) -> problem.[valve].flowRate * remaining)
+    |> List.map (fun (valve, remaining) ->
+        problem.valves.[valve].flowRate
+        * (TotalTime - remaining))
     |> List.sum
 
 let currentPressure (problem: Problem) state =
     state.openValves
     |> Map.toList
-    |> List.map (fun (valve, _) -> problem.[valve].flowRate)
+    |> List.map (fun (valve, _) -> problem.valves.[valve].flowRate)
     |> List.sum
 
-let stateCost problem state =
-    state.remainingTime, totalPressure problem state
+let stateCost problem state = -totalPressure problem state
 
 let isSolution problem state =
-    state.remainingTime - TimeToOpenValve = 1<minute>
-    || state.openValves |> Map.count = Map.count problem
+    state.time = TotalTime
+    || state.openValves |> Map.count = problem.openableCount
 
-let printState problem label state =
-    let sb = StringBuilder()
+let openStatus state =
+    if isOpen state.valve state then
+        "+"
+    else
+        "-"
 
-    let currentMinute =
-        RemainingTime - state.remainingTime + 1<minute>
+let printState problem state =
+    // Format: <Time> "<ValveN>" [Pressure]: +-<Valve1>->+-<Valve2>->...+-<ValveN>
 
-    let status =
-        if isOpen label.valve state then
-            "open"
-        else
-            "closed"
-
-    let totalPresure = totalPressure problem state
-
-    sb.AppendLine(sprintf "== Minute %d at %s valve %s [%d] ==" currentMinute status label.valve totalPresure)
-    |> ignore
-
-    let valves =
-        match state.openValves |> Map.toList with
-        | [] -> "No valves are open."
-        | valves ->
-            let currentPresure = currentPressure problem state
-
-            let valves =
-                valves
-                |> List.map (fun (valve, valveRemaining) ->
-                    sprintf "%s (%d)" valve (valveRemaining - state.remainingTime))
-                |> String.concat ", "
-
-            sprintf "Open valves: %s; releasing %d pressure." valves currentPresure
-
-    sb.AppendLine(valves) |> ignore
-    sb.ToString()
-
-let printPathNode problem (node: SearchPathNode<NodeLabel, string, NodeState>) =
-    let remaining = node.current.state.remainingTime
-    let total = totalPressure problem node.current.state
-
-    let current =
-        currentPressure problem node.current.state
-
-    let valve = node.current.node.valve
-
-    let status =
-        if isOpen valve node.current.state then
-            "+"
-        else
-            "-"
-
-    let edgeLabel =
-        match node.previous with
-        | None -> "starting"
-        | Some x -> x.edgeLabel
-
-    let openValves =
-        node.current.state.openValves
-        |> Map.toList
-        |> List.map fst
-        |> String.concat ","
+    let time = state.time
+    let indent = String(' ', int time)
+    let pressure = totalPressure problem state
+    let valve = state.valve
+    let status = openStatus state
 
     let path =
-        node
-        |> buildAStarPath
-        |> List.map (fun x -> sprintf "%s[%d]" x.node.valve x.node.pressure)
+        let rec loop state =
+            match state.previous with
+            | None -> [ state ]
+            | Some previous -> state :: loop previous
+
+        loop state
+        |> Seq.rev
+        |> Seq.map (fun state -> $"%s{openStatus state}%s{state.valve}")
         |> String.concat "->"
 
-    $"%2d{remaining} rem. %s{status}%s{valve}[%5d{total}]: %12s{edgeLabel}. Releasing [%4d{current}] with %-17s{openValves}. Path {path}"
-// $"%2d{remaining} %A{valve}[%5d{total}]: {path}"
+    sprintf "%s%2d %s%A [%5d]: %s" indent time status valve pressure path
 
-let printEdge problem (edge: SearchEdge<NodeLabel, string, NodeState>) =
-    let current = currentPressure problem edge.state
-    let total = totalPressure problem edge.state
+let printSolution part problem solution =
+    match solution with
+    | None -> printfn "PART %d: No solution found" part
+    | Some path ->
+        printfn "PART %d: " part
 
-    let valve = edge.target.valve
+        for item in path do
+            let sol = if item.isSolution then "* " else "  "
+            let pressure = totalPressure problem item.state
+            let status = openStatus item.state
+            let valve = item.state.valve
 
-    $"      - %A{valve}[%5d{total}]: %12s{edge.edgeLabel} [%4d{current}]"
+            let decision =
+                match item.decision with
+                | None -> "Starting"
+                | Some OpenValve -> "Open"
+                | Some (MoveToValve valve) -> $"Move to {valve}"
 
-let maximizePressureRelease (problem: Problem) : SearchPathItem<NodeLabel, string, NodeState> list option =
+            printfn "%s %s%A[%d] %s" sol status valve pressure decision
+
+let searchOptions problem =
     let startState =
-        { remainingTime = RemainingTime
-          openValves = Map.empty }
+        { valve = StartingValve
+          time = 0<minute>
+          openValves = Map.empty
+          previous = None }
 
-    let startNodes =
-        [ { node =
-              { valve = StartingValve
-                pressure = 0<pressure> }
-            state = startState
-            isSolution = false } ]
+    { startNodes =
+        [ { state = startState
+            isSolution = isSolution problem startState } ]
+      stateCostComparer = fun x y -> sign (stateCost problem x - stateCost problem y)
+      stateEquals = fun x y -> x.valve = y.valve && x.openValves = y.openValves && x.time = y.time
+      stateHash = fun x -> HashCode.Combine(x.valve, x.openValves, x.time)
+      next =
+        fun node ->
+            seq {
+                if not node.isSolution then
+                    if
+                        not (isOpen node.state.valve node.state)
+                        && problem.valves.[node.state.valve].flowRate > 0<flowRate>
+                    then
+                        let state' =
+                            { node.state with
+                                previous = Some node.state
+                                time = node.state.time + TickTime
+                                openValves =
+                                    node.state.openValves
+                                    |> Map.add node.state.valve (node.state.time + TickTime) }
 
-    let stateComparer =
-        { new IComparer<NodeState> with
-            member _.Compare(x, y) =
-                let (xRemaining, xTotal) = stateCost problem x
-                let (yRemaining, yTotal) = stateCost problem y
-                match xRemaining - yRemaining with
-                | 0<minute> -> sign(yTotal - xTotal)
-                | x -> sign(x) }
+                        yield
+                            { decision = OpenValve
+                              state = state'
+                              isSolution = isSolution problem state' }
 
-    let stateCost = totalPressure problem >> string
+                    for valve' in problem.valves.[node.state.valve].nextValves do
+                        let state' =
+                            { node.state with
+                                previous = Some node.state
+                                time = node.state.time + TickTime
+                                valve = valve' }
 
-    let nodeComparer = EqualityComparer<NodeLabel>.Default
-    // let nodeComparer =
-    //     { new IEqualityComparer<NodeLabel> with
-    //         member _.Equals(x, y) = false
-    //         member _.GetHashCode(x) = x.GetHashCode() }
+                        yield
+                            { decision = MoveToValve valve'
+                              state = state'
+                              isSolution = isSolution problem state' }
+            } }
 
-    let next (current: SearchNode<NodeLabel, NodeState>) =
-        seq {
-            let valve = current.node.valve
-            let pressure = current.node.pressure
-            let state = current.state
-            let valveInfo = problem.[valve]
-            let valveCount = problem |> Map.count
-            let couldFindBetterPath = true
+let part1 (problem: Problem) =
+    let options = searchOptions problem
 
-            if not current.isSolution && couldFindBetterPath then
-                // If current valve is closed, an option is to take one minute to open it.
-                // But only if it is not damaged.
-                if
-                    not (isOpen valve state)
-                    && valveInfo.flowRate > 0<flowRate>
-                then
-                    // Remaining time releasing pressure after opening it
-                    let remainingTime = state.remainingTime - TimeToOpenValve
+    let mutable count = 0
+    let mutable bestSolutionPressure = 0<pressure>
+    let mutable startTick = Stopwatch.GetTimestamp()
 
-                    // Mark valve as open
-                    let openValves =
-                        state.openValves |> Map.add valve remainingTime
+    depthFirstSearchMemoSeq options
+    |> Seq.map (fun pathNode ->
+        count <- count + 1
 
-                    let state' =
-                        { openValves = openValves
-                          remainingTime = remainingTime }
+        if pathNode.current.isSolution then
+            let pressure =
+                totalPressure problem pathNode.current.state
 
-                    let isSolution = isSolution problem state'
+            if pressure > bestSolutionPressure then
+                bestSolutionPressure <- pressure
+                let now = Stopwatch.GetTimestamp()
 
-                    let pressure' = totalPressure problem state'
+                let elapsed =
+                    int (
+                        Stopwatch
+                            .GetElapsedTime(
+                                startTick,
+                                now
+                            )
+                            .TotalMilliseconds
+                    )
 
-                    let edge =
-                        { target = { valve = valve; pressure = pressure' }
-                          isSolution = isSolution
-                          state = state'
-                          edgeLabel = $"open %A{valve}" }
+                printfn "Found solution with pressure %5d after %6d ms (%8d nodes)" pressure elapsed count
 
-                    // printfn "%s" (printEdge problem edge)
-
-                    yield edge
-
-                for valve' in valveInfo.nextValves do
-                    // Remaining time after traversing tunnel
-                    let remainingTime =
-                        state.remainingTime - TimeToTraverseTunnel
-
-                    let state' =
-                        { openValves = state.openValves
-                          remainingTime = remainingTime }
-
-                    let isSolution = isSolution problem state'
-
-                    let pressure' = totalPressure problem state'
-
-                    let edge =
-                        { target = { valve = valve'; pressure = pressure' }
-                          isSolution = isSolution
-                          state = state'
-                          edgeLabel = $"move to %A{valve'}" }
-
-                    // printfn "%s" (printEdge problem edge)
-
-                    yield edge
-
-        // // Also, we could do nothing
-        // let remainingTime =
-        //     state.remainingTime - TimeToTraverseTunnel
-
-        // let edge =
-        //     { target = valve
-        //       isSolution = false
-        //       state = { state with remainingTime = remainingTime }
-        //       edgeLabel = "do nothing" }
-
-        // // printfn "%s" (printEdge problem edge)
-
-        // yield edge
-
-        }
-
-    aStarSeq
-        { startNodes = startNodes
-          stateComparer = stateComparer
-          nodeComparer = nodeComparer
-          stateCost = stateCost
-          next = next }
-    // |> Seq.map (fun node ->
-    //     printPathNode problem node |> printfn "%s"
-    //     node)
-    |> Seq.filter (fun node -> node.current.isSolution)
-    |> Seq.sortByComparer stateComparer (fun node -> node.current.state)
-    |> Seq.tryHead
-    |> Option.map buildAStarPath
-
-// for pathNode in starSeq do
-//     let txt =
-//         printState problem pathNode.current.node pathNode.current.state
-
-//     printfn "%s" txt
+        pathNode)
+    |> findBestSolution options.stateCostComparer
+    |> Option.map buildPathItems
+    |> printSolution 1 problem
 
 let execute lines =
     let input = parseInput lines
     let problem = toProblem input
 
-    match maximizePressureRelease problem with
-    | None -> printfn "PART1: No solution found."
-    | Some solution ->
-        printfn "PART1:"
-
-        for item in solution do
-            let txt = printState problem item.node item.state
-
-            let doing =
-                match item.edge with
-                | None -> "starting"
-                | Some edge -> fst edge
-
-            printfn "%s while %s" txt doing
+    part1 problem
 
 Environment.GetCommandLineArgs().[2]
 |> File.ReadAllText
