@@ -76,8 +76,11 @@ let depthFirstSearchMemoSeq (options: SearchMemoOptions<'state, 'decision>) =
     seq {
         let visited =
             Dictionary<'state, SearchPathNode<'state, 'decision>>(
-                EqualityComparer.ofFun options.stateEquals options.stateHash)
-        let stack = Stack<SearchPathNode<'state,'decision>>()
+                EqualityComparer.ofFun options.stateEquals options.stateHash
+            )
+
+        let stack =
+            Stack<SearchPathNode<'state, 'decision>>()
 
         for node in options.startNodes do
             let pathNode = { current = node; previous = None }
@@ -116,8 +119,11 @@ let breadthFirstSearchMemoSeq (options: SearchMemoOptions<'state, 'decision>) =
     seq {
         let visited =
             Dictionary<'state, SearchPathNode<'state, 'decision>>(
-                EqualityComparer.ofFun options.stateEquals options.stateHash)
-        let queue = Queue<SearchPathNode<'state,'decision>>()
+                EqualityComparer.ofFun options.stateEquals options.stateHash
+            )
+
+        let queue =
+            Queue<SearchPathNode<'state, 'decision>>()
 
         for node in options.startNodes do
             let pathNode = { current = node; previous = None }
@@ -148,7 +154,7 @@ let breadthFirstSearchMemoSeq (options: SearchMemoOptions<'state, 'decision>) =
                     queue.Enqueue pathNode'
     }
 
-// breathFirstSearchMemoSeq performs a Depth First Search on a search space
+// aStarSearchMemoSeq performs a A* Search on a search space
 // Given that the search space could contain repeated states, a set of all visited states is memoized while searching, to avoid infinite loops
 // This is a lazy sequence, so it can return as many final paths as found (possibly infinite).
 // Breath first search does not use the cost of the search nodes.
@@ -156,10 +162,11 @@ let aStarSearchMemoSeq (options: SearchMemoOptions<'state, 'decision>) =
     seq {
         let visited =
             Dictionary<'state, SearchPathNode<'state, 'decision>>(
-                EqualityComparer.ofFun options.stateEquals options.stateHash)
+                EqualityComparer.ofFun options.stateEquals options.stateHash
+            )
+
         let queue =
-            PriorityQueue<SearchPathNode<'state,'decision>, 'state>(
-                Comparer.ofFun options.stateCostComparer)
+            PriorityQueue<SearchPathNode<'state, 'decision>, 'state>(Comparer.ofFun options.stateCostComparer)
 
         for node in options.startNodes do
             let pathNode = { current = node; previous = None }
