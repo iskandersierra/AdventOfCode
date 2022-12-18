@@ -217,17 +217,13 @@ let addOpenValve (valveIndex: int) (openValves: IndexSet) = openValves ||| (1u <
 
 module Part1 =
     type State =
-        { valve: Valve
-          index: int
+        { index: int
           time: int<minute>
           totalPressure: int<pressure>
           openValvesCount: int
-          openValves: IndexSet
-          previous: State option }
+          openValves: IndexSet }
 
-    type Decision =
-        | MoveAndOpen of index: int * steps: int<minute>
-        | Solved
+    type Decision = MoveAndOpen of index: int * steps: int<minute>
 
     let stateCost state = -state.totalPressure
 
@@ -244,7 +240,6 @@ module Part1 =
     let decisionStatus problem decision =
         match decision with
         | None -> "Starting"
-        | Some Solved -> "Solved"
         | Some (MoveAndOpen (index, steps)) ->
             let name = problem.valves.[index].name
             $"Move and open {name} in {steps} min"
@@ -258,57 +253,49 @@ module Part1 =
             for item in path do
                 let pressure = item.state.totalPressure
                 let status = openStatus item.state
-                let valve = item.state.valve
+                let valve = problem.valves.[item.state.index].name
                 let decision = decisionStatus problem item.decision
-                printfn "%s%A[%d] %s" status valve pressure decision
+                printfn "%s%A [%4d] %s" status valve pressure decision
 
-    let getPossibleDecisions problem (openValves: IndexSet) valveIndex =
+    let canMoveAndOpen problem index openValves time =
+        not (isOpen index openValves)
+        && problem.valves.[index].flowRate > 0<flowRate>
+        && time + TickTime <= problem.totalTime
+
+    let getPossibleDecisions problem state =
         seq {
-            for next in problem.valves.[valveIndex].nextValves do
-                if
-                    not (isOpen next.index openValves)
-                    && problem.valves.[next.index].flowRate > 0<flowRate>
-                then
+            for next in problem.valves.[state.index].nextValves do
+                if canMoveAndOpen problem next.index state.openValves (state.time + next.distance) then
                     yield MoveAndOpen(next.index, next.distance)
         }
 
-    let applyDecision problem state decision : SearchEdge<State, Decision> option =
+    let applyDecision problem state decision : SearchEdge<State, Decision> =
         match decision with
         | MoveAndOpen (index, steps) ->
             let time = state.time + steps + TickTime
 
-            if time > problem.totalTime then
-                None
-            else
-                let state' =
-                    { state with
-                        previous = Some state
-                        time = time
-                        index = index
-                        valve = problem.valves.[index].name
-                        totalPressure =
-                            state.totalPressure
-                            + problem.valves.[index].flowRate
-                              * (problem.totalTime - time)
-                        openValvesCount = state.openValvesCount + 1
-                        openValves = state.openValves |> addOpenValve index }
+            let state' =
+                { state with
+                    time = time
+                    index = index
+                    totalPressure =
+                        state.totalPressure
+                        + problem.valves.[index].flowRate
+                          * (problem.totalTime - time)
+                    openValvesCount = state.openValvesCount + 1
+                    openValves = state.openValves |> addOpenValve index }
 
-                Some
-                    { decision = decision
-                      state = state'
-                      isSolution = isSolution problem state' }
-
-        | Solved -> None
+            { decision = decision
+              state = state'
+              isSolution = isSolution problem state' }
 
     let searchOptions problem =
         let startState =
-            { valve = StartingValve
-              index = problem.startIndex
+            { index = problem.startIndex
               time = 0<minute>
               totalPressure = 0<pressure>
               openValvesCount = 0
-              openValves = 0u
-              previous = None }
+              openValves = 0u }
 
         { startNodes =
             [ { state = startState
@@ -316,197 +303,216 @@ module Part1 =
           stateCostComparer = fun x y -> sign (stateCost x - stateCost y)
           stateEquals =
             fun x y ->
-                x.valve = y.valve
+                x.index = y.index
                 && x.openValves = y.openValves
                 && x.totalPressure = y.totalPressure
-          stateHash = fun x -> HashCode.Combine(x.valve, x.openValves, x.totalPressure)
+          stateHash = fun x -> HashCode.Combine(x.index, x.openValves, x.totalPressure)
           next =
             fun node ->
                 seq {
                     if not node.isSolution then
-                        for decision in getPossibleDecisions problem node.state.openValves node.state.index do
-                            match applyDecision problem node.state decision with
-                            | Some edge -> yield edge
-                            | None -> ()
-                }
-        }
+                        for decision in getPossibleDecisions problem node.state do
+                            yield applyDecision problem node.state decision
+                } }
 
     let execute (problem: Problem) =
         let options = searchOptions problem
 
-        let mutable startTick = Stopwatch.GetTimestamp()
+        let stopwatch = Stopwatch.StartNew()
 
         breadthFirstSearchMemoSeq options
         |> findBestSolution options.stateCostComparer
         |> Option.map buildPathItems
         |> printSolution problem
 
-        let elapsed =
-            Stopwatch.GetElapsedTime(startTick, Stopwatch.GetTimestamp())
+        let elapsed = stopwatch.Elapsed
 
         printfn "Elapsed: %A" elapsed
 
-// module Part2 =
+module Part2 =
+    type State =
+        { individuals: IndividualState list
+          time: int<minute>
+          totalPressure: int<pressure>
+          openValvesCount: int
+          openValves: IndexSet }
 
-//     type State =
-//         { myValve: Valve
-//           elephantValve: Valve
-//           time: int<minute>
-//           totalPressure: int<pressure>
-//           // How much time each valve will remain open
-//           openValves: Set<Valve>
-//           previous: State option }
+    and IndividualState =
+        { index: int
+          name: string
+          target: TargetValve option }
 
-//     type Decision =
-//         { myDecision: Part1.Decision
-//           elephantDecision: Part1.Decision }
+    and TargetValve =
+        { targetIndex: int
+          usedSteps: int<minute>
+          remaining: int<minute> }
 
-//     let stateCost state = -state.totalPressure
+    type Decision = Decision of IndividualDecision list
 
-//     let decisionStatus decision =
-//         match decision with
-//         | None -> "Do nothing"
-//         | Some decision ->
-//             let myDecision =
-//                 Part1.decisionStatus (Some decision.myDecision)
+    and IndividualDecision =
+        | MovingTowards of TargetValve
+        | MovedAndOpen of MoveAndOpen
 
-//             let elephantDecision =
-//                 Part1.decisionStatus (Some decision.elephantDecision)
+    and MoveAndOpen = { index: int; moveSteps: int<minute> }
 
-//             $"I {myDecision} / Elephant {elephantDecision}"
+    let stateCost state = -state.totalPressure
 
-//     let printSolution solution =
-//         match solution with
-//         | None -> printfn "PART 2: No solution found"
-//         | Some path ->
-//             printfn "PART 2: "
+    let isSolution problem state =
+        state.time = problem.totalTime
+        || state.openValvesCount = problem.openableCount
 
-//             for item in path do
-//                 let sol = if item.isSolution then "* " else "  "
-//                 let pressure = item.state.totalPressure
-//                 let myValve = item.state.myValve
-//                 let elephantValve = item.state.elephantValve
+    let printStatuses problem state =
+        let printIndividual (iState: IndividualState) =
+            let valveName = problem.valves.[iState.index].name
 
-//                 let myStatus =
-//                     Part1.openStatus item.state.openValves item.state.myValve
+            let valveStatus =
+                if isOpen iState.index state.openValves then
+                    "+"
+                else
+                    "-"
 
-//                 let elephantStatus =
-//                     Part1.openStatus item.state.openValves item.state.elephantValve
+            $"{iState.name}:{valveStatus}{valveName}"
 
-//                 let decision = decisionStatus item.decision
+        state.individuals
+        |> Seq.map (fun iState -> printIndividual iState)
+        |> String.concat "|"
 
-//                 printfn "%s %s%A|%s%A[%d] %s" sol myStatus myValve elephantStatus elephantValve pressure decision
+    let printDecisionStatuses problem decision =
+        match decision with
+        | None -> "Starting"
+        | Some (Decision decisions) ->
+            let printIndividualDecision iDecision =
+                match iDecision with
+                | MovingTowards target ->
+                    let valveName = problem.valves.[target.targetIndex].name
+                    $"Moving towards {valveName} in {target.remaining} min"
+                | MovedAndOpen data ->
+                    let valveName = problem.valves.[data.index].name
+                    $"Moved and open {valveName} in {data.moveSteps} min"
 
-//     let applyDecision problem state decision =
-//         match decision.myDecision, decision.elephantDecision with
-//         | Part1.OpenValve, Part1.OpenValve ->
-//             if state.myValve = state.elephantValve then
-//                 None
-//             else
-//                 let time = state.time + TickTime
+            decisions
+            |> Seq.map (fun iDecision -> printIndividualDecision iDecision)
+            |> String.concat "; "
 
-//                 Some
-//                     { state with
-//                         previous = Some state
-//                         time = time
-//                         totalPressure =
-//                             state.totalPressure
-//                             + problem.valves.[state.myValve].flowRate
-//                               * (problem.totalTime - time)
-//                             + problem.valves.[state.elephantValve].flowRate
-//                               * (problem.totalTime - time)
-//                         openValves =
-//                             state.openValves
-//                             |> Set.add state.myValve
-//                             |> Set.add state.elephantValve }
+    let printSolution problem solution =
+        match solution with
+        | None -> printfn "PART 2: No solution found"
+        | Some path ->
+            printfn "PART 2: "
 
-//         | Part1.MoveToValve myValve, Part1.OpenValve ->
-//             let time = state.time + TickTime
+            for item in path do
+                let pressure = item.state.totalPressure
+                let statuses = printStatuses problem item.state
 
-//             Some
-//                 { state with
-//                     previous = Some state
-//                     time = time
-//                     myValve = myValve
-//                     totalPressure =
-//                         state.totalPressure
-//                         + problem.valves.[state.elephantValve].flowRate
-//                           * (problem.totalTime - time)
-//                     openValves = state.openValves |> Set.add state.elephantValve }
+                let decisions =
+                    printDecisionStatuses problem item.decision
 
-//         | Part1.OpenValve, Part1.MoveToValve elephantValve ->
-//             let time = state.time + TickTime
+                printfn "%s [%4d] %s" statuses pressure decisions
 
-//             Some
-//                 { state with
-//                     previous = Some state
-//                     time = time
-//                     elephantValve = elephantValve
-//                     totalPressure =
-//                         state.totalPressure
-//                         + problem.valves.[state.myValve].flowRate
-//                           * (problem.totalTime - time)
-//                     openValves = state.openValves |> Set.add state.myValve }
+    let canMoveAndOpen problem index openValves time =
+        not (isOpen index openValves)
+        && problem.valves.[index].flowRate > 0<flowRate>
+        && time + TickTime <= problem.totalTime
 
-//         | Part1.MoveToValve myValve, Part1.MoveToValve elephantValve ->
-//             Some
-//                 { state with
-//                     previous = Some state
-//                     time = state.time + TickTime
-//                     myValve = myValve
-//                     elephantValve = elephantValve }
+    let getIndividualDecisions problem state iState =
+        seq {
+            match iState.target with
+            | None ->
+                for next in problem.valves.[iState.index].nextValves do
+                    if canMoveAndOpen problem next.index state.openValves (state.time + next.distance) then
+                        yield
+                            { moveSteps = next.distance
+                              index = next.index }
+            | Some target ->
+                if canMoveAndOpen problem target.targetIndex state.openValves (state.time + target.remaining) then
+                    yield
+                        { moveSteps = target.remaining
+                          index = target.targetIndex }
+        }
 
-//     let searchOptions problem =
-//         let startState =
-//             { myValve = StartingValve
-//               elephantValve = StartingValve
-//               time = 0<minute>
-//               totalPressure = 0<pressure>
-//               openValves = Set.empty
-//               previous = None }
+    // let getPossibleDecisions problem state =
+    //     let decisions =
+    //         state.individuals
+    //         |> Seq.map (getIndividualDecisions problem state >> Seq.toList)
+    //         |> Seq.toList
 
-//         { startNodes =
-//             [ { state = startState
-//                 isSolution = Part1.isSolution problem startState.openValves startState.time } ]
-//           stateCostComparer = fun x y -> sign (stateCost x - stateCost y)
-//           stateEquals =
-//             fun x y ->
-//                 x.myValve = y.myValve
-//                 && x.elephantValve = y.elephantValve
-//                 && x.openValves = y.openValves
-//                 && x.totalPressure = y.totalPressure
-//           stateHash = fun x -> HashCode.Combine(x.myValve, x.elephantValve, x.openValves, x.totalPressure)
-//           next =
-//             fun node ->
-//                 seq {
-//                     if not node.isSolution then
-//                         for myDecision in Part1.getPossibleDecisions problem node.state.openValves node.state.myValve do
-//                             for elephantDecision in Part1.getPossibleDecisions problem node.state.openValves node.state.elephantValve do
-//                                 let decision = { myDecision = myDecision; elephantDecision = elephantDecision }
-//                                 match applyDecision problem node.state decision with
-//                                 | None -> ()
-//                                 | Some state ->
-//                                     yield
-//                                         { decision = decision
-//                                           state = state
-//                                           isSolution = Part1.isSolution problem state.openValves state.time }
-//                 }
-//         }
+    //     let earliestDecision decisions =
+    //         let earliestTime =
+    //             decisions
+    //             |> Seq.map (fun move -> state.time + move.moveSteps + TickTime)
+    //             |> Seq.min
 
-//     let execute (problem: Problem) =
-//         let options = searchOptions problem
+    //         let earliestDecisions =
+    //             decisions
+    //             |> Seq.filter (fun (index, steps) -> state.time + steps + TickTime = earliest)
+    //             |> Seq.toList
 
-//         let mutable startTick = Stopwatch.GetTimestamp()
+    //         Decision(
+    //             earliestDecisions
+    //             |> List.map (fun (index, steps) -> MovedAndOpen(index, steps))
+    //         )
 
-//         breadthFirstSearchMemoSeq options
-//         |> findBestSolution options.stateCostComparer
-//         |> Option.map buildPathItems
-//         |> printSolution
+    //     Seq.combine decisions |> Seq.map earliestDecision
 
-//         let elapsed =
-//             Stopwatch.GetElapsedTime(startTick, Stopwatch.GetTimestamp())
+    // let applyDecision problem state decision : SearchEdge<State, Decision> =
+    //     match decision with
+    //     | MoveAndOpen (index, steps) ->
+    //         let time = state.time + steps + TickTime
 
-//         printfn "Elapsed: %A" elapsed
+    //         let state' =
+    //             { state with
+    //                 time = time
+    //                 index = index
+    //                 totalPressure =
+    //                     state.totalPressure
+    //                     + problem.valves.[index].flowRate
+    //                       * (problem.totalTime - time)
+    //                 openValvesCount = state.openValvesCount + 1
+    //                 openValves = state.openValves |> addOpenValve index }
+
+    //         { decision = decision
+    //           state = state'
+    //           isSolution = isSolution problem state' }
+
+    // let searchOptions problem =
+    //     let startState =
+    //         { index = problem.startIndex
+    //           time = 0<minute>
+    //           totalPressure = 0<pressure>
+    //           openValvesCount = 0
+    //           openValves = 0u }
+
+    //     { startNodes =
+    //         [ { state = startState
+    //             isSolution = isSolution problem startState } ]
+    //       stateCostComparer = fun x y -> sign (stateCost x - stateCost y)
+    //       stateEquals =
+    //         fun x y ->
+    //             x.index = y.index
+    //             && x.openValves = y.openValves
+    //             && x.totalPressure = y.totalPressure
+    //       stateHash = fun x -> HashCode.Combine(x.index, x.openValves, x.totalPressure)
+    //       next =
+    //         fun node ->
+    //             seq {
+    //                 if not node.isSolution then
+    //                     for decision in getPossibleDecisions problem node.state do
+    //                         yield applyDecision problem node.state decision
+    //             } }
+
+    // let execute (problem: Problem) =
+    //     let options = searchOptions problem
+
+    //     let stopwatch = Stopwatch.StartNew()
+
+    //     breadthFirstSearchMemoSeq options
+    //     |> findBestSolution options.stateCostComparer
+    //     |> Option.map buildPathItems
+    //     |> printSolution problem
+
+    //     let elapsed = stopwatch.Elapsed
+
+    //     printfn "Elapsed: %A" elapsed
 
 let execute lines =
     let input = parseInput lines

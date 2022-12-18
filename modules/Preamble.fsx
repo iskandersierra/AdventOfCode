@@ -38,3 +38,13 @@ module Seq =
     let tryMinBy comparer = tryMaxBy (fun a b -> comparer b a)
 
     let tryMin comparer = tryMinBy comparer id
+
+    let rec combine listOfOptions =
+        seq {
+            match listOfOptions with
+            | [] -> yield []
+            | headDecisions :: listOfOptions' ->
+                for decision in headDecisions do
+                    for rest in combine listOfOptions' do
+                        yield decision :: rest
+        }
