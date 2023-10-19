@@ -1,0 +1,8 @@
+minDrop: (0, 0, 0), maxDrop: (21, 21, 21)
+len1: 22, len2: 22, len3: 22
+Elapsed: 00:00:00.0065641
+Surface Part1: 4308
+Filled exterior with 6365 water
+Steam Surface Part2: 1768
+Lava Surface Part2: 2540
+Elapsed: 00:00:00.0014999

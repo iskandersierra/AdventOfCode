@@ -1,0 +1,18 @@
+Problem: [|{ index = 1
+    oreOre = 4
+    clayOre = 2
+    obsidianOre = 3
+    obsidianClay = 14
+    geodeOre = 2
+    geodeObsidian = 7 }; { index = 2
+                           oreOre = 2
+                           clayOre = 3
+                           obsidianOre = 3
+                           obsidianClay = 8
+                           geodeOre = 3
+                           geodeObsidian = 12 }|]
+
+Elapsed: 00:00:00.0008857
+RESULT PART1: 1
+Elapsed: 00:00:00.0000018
+RESULT PART2: 2

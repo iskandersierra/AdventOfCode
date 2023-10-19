@@ -15,16 +15,6 @@ open Graphs
 
 #nowarn "0025"
 
-
-[<Measure>]
-type minute
-
-[<Measure>]
-type pressure
-
-[<Measure>]
-type flowRate = pressure / minute
-
 [<Literal>]
 let PushLeft = '<'
 
@@ -288,9 +278,6 @@ let execute lines =
     let problem1 = toProblem (Part1.createSpec ()) input
     // printfn "Problem: %O\n" problem1
     Part1.execute problem1
-
-// let problem2 = toProblem 26<minute> input
-// Part2.execute problem2
 
 Environment.GetCommandLineArgs().[2]
 |> File.ReadAllText
