@@ -15,6 +15,11 @@ module Array =
                 yield ArraySegment(data, i, windowSize)
         }
 
+module String =
+    let splitByChar (ch: char) (source: string) =
+        source.Split([|ch|], StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
+
+
 module Time =
     let sprintElapsed (time: TimeSpan) =
         let ms = time.TotalMilliseconds
