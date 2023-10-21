@@ -15,6 +15,32 @@ module Array =
                 yield ArraySegment(data, i, windowSize)
         }
 
+    let iterateCombinations f combinationSize elementCount =
+        let rec loop (combination: int[]) (used: bool[]) index =
+            if index >= elementCount then
+                f combination
+            else
+                let rec innerLoop element =
+                    if element >= elementCount then
+                        ValueNone
+                    else
+                        if not used.[element] then
+                            combination.[index] <- element
+                            used.[element] <- true
+                            match loop combination used (index + 1) with
+                            | ValueSome result -> ValueSome result
+                            | ValueNone ->
+                                used.[element] <- false
+                                innerLoop (element + 1)
+                        else
+                            innerLoop (element + 1)
+
+                innerLoop 0
+
+        let combination = Array.zeroCreate combinationSize
+        let used = Array.zeroCreate elementCount
+        loop combination used 0
+
 module String =
     let splitByChar (ch: char) (source: string) =
         source.Split([|ch|], StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
@@ -37,7 +63,7 @@ module Time =
                     sprintf "%0.3f ps" (ns * 1000.0)
 
     let sprintElapsedN (n: int) (time: TimeSpan) =
-        let perInput = time.Divide(float n)
+        let perInput = if n > 0 then time.Divide(float n) else time
         let total = sprintElapsed time
         let perInput = sprintElapsed perInput
         $"{total} ({perInput}/input)"
