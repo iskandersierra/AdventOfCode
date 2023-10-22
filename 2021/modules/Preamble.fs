@@ -8,6 +8,15 @@ open System.Diagnostics
 module Seq =
     let tee f = Seq.map (fun a -> f a; a)
 
+    let takeAtMost (n: int) (source: 'a seq) =
+        seq {
+            use enumerator = source.GetEnumerator()
+            let mutable i = 0
+            while i < n && enumerator.MoveNext() do
+                yield enumerator.Current
+                i <- i + 1
+        }
+
 module Array =
     let windows windowSize data =
         seq {
@@ -57,10 +66,7 @@ module Time =
                 sprintf "%0.3f µs" µs
             else
                 let ns = µs * 1000.0
-                if ns >= 1.0 then
-                    sprintf "%0.3f ns" ns
-                else
-                    sprintf "%0.3f ps" (ns * 1000.0)
+                sprintf "%0.3f ns" ns
 
     let sprintElapsedN (n: int) (time: TimeSpan) =
         let perInput = if n > 0 then time.Divide(float n) else time
