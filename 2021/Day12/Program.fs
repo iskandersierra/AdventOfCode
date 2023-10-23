@@ -26,7 +26,8 @@ type Output1 =
         // |> Seq.sort
         // |> Seq.iter (fun path -> sb.AppendLine($"  {path}") |> ignore)
 
-        sb.AppendLine($"Path count: {this.pathCount}") |> ignore
+        sb.AppendLine($"Path count: {this.pathCount}")
+        |> ignore
 
         sb.ToString()
 
@@ -93,11 +94,15 @@ let optimizeInput (input: Input) =
                     input
                     |> Array.filter (fun edge -> edge.toCave = nodeNames.[i])
                     |> Array.map (fun edge -> nodeIndices.[edge.fromCave])
+
                 let fromEdges =
                     input
                     |> Array.filter (fun edge -> edge.fromCave = nodeNames.[i])
                     |> Array.map (fun edge -> nodeIndices.[edge.toCave])
-                Array.concat [ toEdges; fromEdges ] |> Array.sort |> Array.distinct
+
+                Array.concat [ toEdges; fromEdges ]
+                |> Array.sort
+                |> Array.distinct
 
             arr.[i] <- targets
 
@@ -114,13 +119,19 @@ let step1 (input: OptimInput1) =
 
     let rec loop revPath current visited =
         if current = EndIndex then
-            let caves = List.rev revPath |> List.map (fun i -> input.nodeNames.[i]) |> Array.ofList
+            let caves =
+                List.rev revPath
+                |> List.map (fun i -> input.nodeNames.[i])
+                |> Array.ofList
+
             paths.Add({ caves = caves })
         else
             let targets = input.outboundEdges.[current]
+
             for i = 0 to targets.Length - 1 do
                 let target = targets.[i]
                 let canRepeat = input.canRepeat.[target]
+
                 if canRepeat || Array.get visited target = false then
                     visited.[target] <- true
                     loop (target :: revPath) target visited
@@ -128,7 +139,7 @@ let step1 (input: OptimInput1) =
 
     let visited = Array.zeroCreate input.nodeNames.Length
     visited.[StartIndex] <- true
-    loop [0] 0 visited
+    loop [ 0 ] 0 visited
 
     { pathCount = paths.Count
       paths = paths.ToArray() }
@@ -138,14 +149,20 @@ let step2 (input: OptimInput1) =
 
     let rec loop revPath current visited doubleVisited =
         if current = EndIndex then
-            let caves = List.rev revPath |> List.map (fun i -> input.nodeNames.[i]) |> Array.ofList
+            let caves =
+                List.rev revPath
+                |> List.map (fun i -> input.nodeNames.[i])
+                |> Array.ofList
+
             paths.Add({ caves = caves })
         else
             let targets = input.outboundEdges.[current]
+
             for i = 0 to targets.Length - 1 do
                 let target = targets.[i]
                 let canRepeat = input.canRepeat.[target]
                 let isTargetVisited = Array.get visited target
+
                 if canRepeat then
                     loop (target :: revPath) target visited doubleVisited
                 elif not isTargetVisited then
@@ -157,7 +174,7 @@ let step2 (input: OptimInput1) =
 
     let visited = Array.zeroCreate input.nodeNames.Length
     visited.[StartIndex] <- true
-    loop [0] 0 visited false
+    loop [ 0 ] 0 visited false
 
     { pathCount = paths.Count
       paths = paths.ToArray() }
