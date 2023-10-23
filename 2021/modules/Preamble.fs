@@ -50,6 +50,30 @@ module Array =
         let used = Array.zeroCreate elementCount
         loop combination used 0
 
+module Array2D =
+    let clearWith value source =
+        Array2D.iteri (fun i j _ -> Array2D.set source i j value) source
+
+    let countBy f source =
+        let l1 = Array2D.length1 source - 1
+        let l2 = Array2D.length2 source - 1
+        let mutable result = 0
+        for i = 0 to l1 do
+            for j = 0 to l2 do
+                if f (Array2D.get source i j) then
+                    result <- result + 1
+        result
+
+    let countByij f source =
+        let l1 = Array2D.length1 source - 1
+        let l2 = Array2D.length2 source - 1
+        let mutable result = 0
+        for i = 0 to l1 do
+            for j = 0 to l2 do
+                if f i j (Array2D.get source i j) then
+                    result <- result + 1
+        result
+
 module String =
     let splitByChar (ch: char) (source: string) =
         source.Split([|ch|], StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
