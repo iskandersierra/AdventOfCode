@@ -142,3 +142,11 @@ module Input =
             File.ReadAllText(filename)
 
         | _ -> failwith "Please specify input file name"
+
+module OptionalBuilder =
+    type OptionalBuilder() =
+        member inline __.Bind (x, f) = Option.bind f x
+        member inline __.Return x = Some x
+        member inline __.ReturnFrom x = x
+
+let optional = OptionalBuilder.OptionalBuilder()
