@@ -107,9 +107,88 @@ let rec magnitude (number: Number) =
     | RegularNumber value -> value
     | PairNumber (left, right) -> 3 * (magnitude left) + 2 * (magnitude right)
 
+let addToLeftmostValue number toAdd =
+    let rec loop number =
+        match number with
+        | RegularNumber value -> RegularNumber (value + toAdd)
+        | PairNumber (left, right) -> PairNumber (loop left, right)
+    if toAdd = 0 then
+        number
+    else
+        loop number
+
+let addToRightmostValue number toAdd =
+    let rec loop number =
+        match number with
+        | RegularNumber value -> RegularNumber (value + toAdd)
+        | PairNumber (left, right) -> PairNumber (left, loop right)
+    if toAdd = 0 then
+        number
+    else
+        loop number
+
+type ExplodeNumberResult =
+    | Unexploded of result: Number
+    | Exploding of result: Number * left: int * right: int
+
+let explodeNumber number =
+    let rec loop depth number =
+        match number with
+        | RegularNumber _ ->
+            Unexploded number
+        | PairNumber (RegularNumber left, RegularNumber right) when depth >= 4 ->
+            Exploding (RegularNumber 0, left, right)
+        | PairNumber (left, right) ->
+            match loop (depth + 1) left with
+            | Exploding(exploded, leftValue, rightValue) ->
+                let rightNumber = addToLeftmostValue right rightValue
+                Exploding (PairNumber (exploded, rightNumber), leftValue, 0)
+            | Unexploded leftNumber ->
+                match loop (depth + 1) right with
+                | Exploding(exploded, leftValue, rightValue) ->
+                    let leftNumber = addToRightmostValue left leftValue
+                    Exploding (PairNumber (leftNumber, exploded), 0, rightValue)
+                | Unexploded rightNumber ->
+                    Unexploded (PairNumber (leftNumber, rightNumber))
+    loop 0 number
+
+type SplitNumberResult =
+    | Unsplit of result: Number
+    | Split of result: Number
+
+let rec splitNumber number =
+    match number with
+    | RegularNumber value when value >= 10 ->
+        let left = value / 2
+        let right = value - left
+        Split (PairNumber (RegularNumber left, RegularNumber right))
+    | RegularNumber value ->
+        Unsplit number
+    | PairNumber (leftNumber, rightNumber) ->
+        match splitNumber leftNumber with
+        | Split leftNumber ->
+            Split (PairNumber (leftNumber, rightNumber))
+        | Unsplit leftNumber ->
+            match splitNumber rightNumber with
+            | Split rightNumber ->
+                Split (PairNumber (leftNumber, rightNumber))
+            | Unsplit rightNumber ->
+                Unsplit (PairNumber (leftNumber, rightNumber))
+
 let reduceNumber (number: Number) =
-    // TODO: Implement the reduce = explode + split
-    number
+    let rec loop current =
+        match explodeNumber current with
+        | Exploding (exploded, _, _) ->
+            // printfn "Exploded %s to %s" (printNumber current) (printNumber exploded)
+            loop exploded
+        | Unexploded result ->
+            match splitNumber result with
+            | Split result ->
+                // printfn "Split %s to %s" (printNumber current) (printNumber result)
+                loop result
+            | Unsplit result ->
+                result
+    loop number
 
 
 let step1 (input: OptimInput) =
@@ -120,12 +199,26 @@ let step1 (input: OptimInput) =
             let right = input.numbers.[index]
             let sum = PairNumber (accumulator, right)
             let reduced = reduceNumber sum
+            // printfn "Exploded %s to %s" (printNumber sum) (printNumber reduced)
             loop reduced (index + 1)
     let result = loop input.numbers.[0] 1
-    printfn "Result: %s" (printNumber result)
+    // printfn "Result: %s" (printNumber result)
     magnitude result
 
-let step2 (input: OptimInput) = 2
+let step2 (input: OptimInput) =
+    let mutable maxMagnitude = 0
+    for i = 0 to input.numbers.Length - 1 do
+        let left = input.numbers.[i]
+        for j = 0 to input.numbers.Length - 1 do
+            let right = input.numbers.[j]
+            if i <> j then
+                let sum = PairNumber (left, right)
+                let reduced = reduceNumber sum
+                let magnitude = magnitude reduced
+                if magnitude > maxMagnitude then
+                    maxMagnitude <- magnitude
+                    // printfn "New max magnitude: %d" magnitude
+    maxMagnitude
 
 
 let main () =
@@ -141,9 +234,9 @@ let main () =
     |> time n
     |> printfn "***** STEP1:\n%O"
 
-// (fun () -> step2 input)
-// |> time n
-// |> printfn "***** STEP2:\n%O"
+    (fun () -> step2 input)
+    |> time n
+    |> printfn "***** STEP2:\n%O"
 
 
 main ()
