@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Day21": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Users\\iskan\\dev\\AdventOfCode\\2021\\Day21\\input1.txt"
+    }
+  }
+}
