@@ -2,15 +2,12 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <WarningsAsErrors>3239;FS0025;FS0049;$(WarningsAsErrors)</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\AocUtils\AocUtils.fsproj" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <Compile Include="..\..\2021\modules\Preamble.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

@@ -5,6 +5,7 @@ open System
 open System.IO
 open System.Collections.Generic
 open System.Diagnostics
+open System.Text.RegularExpressions
 
 module Seq =
     let inline getEnumerator (source: 'a seq) = source.GetEnumerator()
@@ -118,6 +119,13 @@ module String =
             StringSplitOptions.RemoveEmptyEntries
             ||| StringSplitOptions.TrimEntries
         )
+
+    let indentWith (ch: char) (size: int) (source: string) =
+        let pattern = Regex(@"^(.*)$", RegexOptions.Multiline)
+        let indentStr = String(ch, size)
+        pattern.Replace(source, indentStr + "$1")
+
+    let indent (size: int) (source: string) = indentWith ' ' size source
 
 module ValueOption =
     let inline noneWith f = function
